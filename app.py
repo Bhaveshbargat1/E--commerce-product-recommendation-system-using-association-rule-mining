@@ -5,53 +5,91 @@ from mlxtend.frequent_patterns import apriori, association_rules
 
 app = Flask(__name__)
 
-dataset = [
-    ['Laptop', 'Mouse', 'Keyboard'],
-    ['Laptop', 'Mouse'],
-    ['Mobile', 'Earphones'],
-    ['Laptop', 'Mouse', 'Headphones'],
-    ['Mobile', 'Charger'],
-    ['Laptop', 'Keyboard'],
-    ['Mobile', 'Earphones', 'Charger'],
-    ['Laptop', 'Mouse', 'Keyboard', 'Headphones']
-]
+# -----------------------------
+# Load Dataset
+# -----------------------------
+data = pd.read_csv("dataset.csv")
 
+transactions = []
+
+for items in data["items"]:
+    transactions.append(items.split(","))
+
+# -----------------------------
+# Transaction Encoding
+# -----------------------------
 te = TransactionEncoder()
-df = pd.DataFrame(te.fit(dataset).transform(dataset), columns=te.columns_)
+te_array = te.fit(transactions).transform(transactions)
 
-frequent_itemsets = apriori(df, min_support=0.2, use_colnames=True)
+basket = pd.DataFrame(te_array, columns=te.columns_)
 
+# -----------------------------
+# Frequent Itemsets
+# -----------------------------
+frequent_itemsets = apriori(
+    basket,
+    min_support=0.20,
+    use_colnames=True
+)
+
+# -----------------------------
+# Association Rules
+# -----------------------------
 rules = association_rules(
     frequent_itemsets,
     metric="confidence",
-    min_threshold=0.6
+    min_threshold=0.50
 )
 
-def recommend(product):
+# -----------------------------
+# Recommendation Function
+# -----------------------------
+def recommend_product(product):
+
     recommendations = []
+
+    product = product.strip().lower()
 
     for _, row in rules.iterrows():
-        if product in row['antecedents']:
-            recommendations.extend(list(row['consequents']))
 
-    return list(set(recommendations))
+        antecedent = [str(i).lower() for i in row["antecedents"]]
+
+        consequent = list(row["consequents"])
+
+        if product in antecedent:
+
+            for item in consequent:
+                if item not in recommendations:
+                    recommendations.append(item)
+
+    return recommendations
 
 
+# -----------------------------
+# Home Page
+# -----------------------------
 @app.route("/", methods=["GET", "POST"])
 def home():
+
     recommendations = []
-    product = ""
+
+    searched_product = ""
 
     if request.method == "POST":
-        product = request.form["product"]
-        recommendations = recommend(product)
+
+        searched_product = request.form["product"]
+
+        recommendations = recommend_product(searched_product)
 
     return render_template(
         "index.html",
-        product=product,
-        recommendations=recommendations
+        recommendations=recommendations,
+        product=searched_product
     )
 
 
+# -----------------------------
+# Run Application
+# -----------------------------
 if __name__ == "__main__":
     app.run(debug=True)
